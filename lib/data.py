@@ -4,6 +4,7 @@ import tarfile
 import wget
 import ssl
 from pathlib import Path
+from PIL import Image
 from torch import tensor
 from torchvision.datasets import ImageFolder
 from torchvision import transforms
@@ -14,6 +15,7 @@ DATASETS_PATH = Path("./datasets")
 IMAGENET_MEAN = tensor([.485, .456, .406])  # Standard Parameter that can be found online
 IMAGENET_STD = tensor([.229, .224, .225])  # Standard Parameter that can be found online
 DEFAULT_SIZE = 224
+DEFAULT_RESIZE = 256
 class_links = {
     "bottle": "https://www.mydrive.ch/shares/38536/3830184030e49fe74747669442f0f282/download/420937370-1629951468/bottle.tar.xz",
     "cable": "https://www.mydrive.ch/shares/38536/3830184030e49fe74747669442f0f282/download/420937413-1629951498/cable.tar.xz",
@@ -34,8 +36,9 @@ class_links = {
 
 
 def mvtec_classes():
-    return ["bottle", "cable", "capsule", "carpet", "grid", "hazelnut", "leather", "metal_nut", "pill", "screw", "tile",
-            "toothbrush", "transistor", "wood", "zipper"]
+    return [
+        "bottle", "cable", "capsule", "carpet", "grid", "hazelnut", "leather", "metal_nut", "pill", "screw", "tile",
+        "toothbrush", "transistor", "wood", "zipper"]
 
 
 class MVTecDataset:
@@ -67,8 +70,56 @@ class MVTecDataset:
 
 
 class MVTecTrainDataset(ImageFolder):
-    pass
+    def __init__(self, cls: str, size: int, resize: int = DEFAULT_RESIZE):
+        super().__init__(
+            root=DATASETS_PATH / cls / "train",
+            transform=transforms.Compose([    # Transform img composing several actions
+                transforms.Resize(resize),    # Resize the image to the default value of 256 if not changed
+                transforms.CenterCrop(size),  # Center the image
+                transforms.ToTensor(),        # Transform the image into a tensor
+                transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),  # Normalize the image
+            ])
+        )
+        self.cls = cls
+        self.size = size
 
 
 class MVTecTestDataset(ImageFolder):
-    pass
+    def __init__(self, cls: str, size: int, resize: int = DEFAULT_RESIZE):
+        super().__init__(
+            root=DATASETS_PATH / cls / "test",
+            transform=transforms.Compose([    # Transform img composing several actions
+                transforms.Resize(resize),    # Resize the image to the default value of 256 if not changed
+                transforms.CenterCrop(size),  # Center the image
+                transforms.ToTensor(),        # Transform the image into a tensor
+                transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),  # Normalize the image
+            ]),
+            target_transform=transforms.Compose([  # Transform mask composing several actions
+                transforms.Resize(resize),         # Resize the mask to the default value of 256 if not changed
+                transforms.CenterCrop(size),       # Center the mask
+                transforms.ToTensor(),             # Transform the mask into a tensor
+            ]),
+        )
+        self.cls = cls
+        self.size = size
+
+    def getitem(self, index):
+        path, _ = self.samples[index]
+        sample = self.loader(path)
+
+        if "good" in path:  # In this way is possible to understand the class label of the image
+            target = Image.new('L', (self.size, self.size))  # L is equal to 8-bit pixels black and white
+            sample_class = 0
+        else:
+            target_path = path.replace("test", "ground_truth")  # Change folder and goes into mask folder
+            target_path = target_path.replace(".png", "_mask.png")  # Change extension required
+            target = self.loader(target_path)
+            sample_class = 1
+
+        if self.transform is not None:
+            sample = self.transform(sample)  # Apply transformation to the image
+
+        if self.target_transform is not None:
+            target = self.target_transform(target)  # Apply transformation to the mask
+
+        return sample, target[:1], sample_class

@@ -5,7 +5,8 @@ ALL_CLASSES = mvtec_classes()
 
 
 def run_model(classes: List = ALL_CLASSES):
-    pass
+    for cls in classes:
+        train_ds, test_ds = MVTecDataset(cls).get_dataloaders()
 
 
 if __name__ == "__main__":
