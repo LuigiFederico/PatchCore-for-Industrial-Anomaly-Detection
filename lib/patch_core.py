@@ -1,13 +1,20 @@
 import torch
+from torch import tensor
 from torch.nn import functional as F
 import numpy as np
+
+from utils import get_coreset
 
 class KNNextractor():
     pass
 
 
 class PatchCore(torch.nn.Module):
-    def __init__(self):
+    def __init__(
+            self,
+            f_coreset: float = 0.01,   # Fraction rate of training samples
+            eps_coreset: float = 0.09, # SparseProjector parameter
+            ):
         super(PatchCore, self).__init__()
         
         # Define hooks to extract feature maps
@@ -27,15 +34,17 @@ class PatchCore(torch.nn.Module):
         self.model.layer2[-1].register_forward_hook(hook)
         self.model.layer3[-1].register_forward_hook(hook)
 
-        # Memory bank
+        # Parameters
         self.memory_bank = []
+        self.f_coreset = f_coreset
+        self.eps_coreset = eps_coreset
 
         # ALTRO?????????????????????????????????????????????????????????????????????
 
         raise NotImplementedError
 
 
-    def forward(self, sample):
+    def forward(self, sample: tensor) -> list(tensor):
         """
             Initialize self.features and let the input sample passing
             throught the backbone net self.model. 
@@ -49,8 +58,12 @@ class PatchCore(torch.nn.Module):
         return self.features
 
 
-    def fit(self, train_dataloader):
-        
+    def fit(self, train_dataloader) -> None:
+        """ 
+            Training phase 
+
+            Creates memory bank from train dataset and apply greedy coreset subsampling.
+        """
         for sample, _ in train_dataloader:
             feature_maps = self(sample)  # Extract feature maps
 
@@ -69,14 +82,14 @@ class PatchCore(torch.nn.Module):
         self.memory_bank = torch.cat(self.memory_bank, 0) # VStack the patches
 
         # Coreset subsampling
-        
-        # TO BE CONTINUED...
-
-
-
-
-
-        raise NotImplementedError
+        if self.f_coreset < 1:
+            coreset_idx = get_coreset(
+                self.memory_bank,
+                l = int(self.f_coreset * self.memory_bank.shape[0]),
+                eps = self.eps_coreset
+            )
+            self.memory_bank = self.memory_bank[coreset_idx]
+       
 
 
     def evaluate(self, test_dataloader):
