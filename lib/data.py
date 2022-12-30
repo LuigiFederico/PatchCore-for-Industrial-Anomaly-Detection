@@ -103,7 +103,7 @@ class MVTecTestDataset(ImageFolder):
         self.cls = cls
         self.size = size
 
-    def getitem(self, index):
+    def __getitem__(self, index):
         path, _ = self.samples[index]
         sample = self.loader(path)
 
