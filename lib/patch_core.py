@@ -7,10 +7,7 @@ class KNNextractor():
 
 
 class PatchCore(torch.nn.Module):
-    def __init__(
-            self,
-            MVTecDataset,
-    ):
+    def __init__(self):
         super(PatchCore, self).__init__()
         
         # Define hooks to extract feature maps
@@ -69,7 +66,7 @@ class PatchCore(torch.nn.Module):
             
             self.memory_bank.append(patch) # Fill memory bank
         
-        self.memory_bank = torch.cat(self.memory_bank, 0) # Stack the patches
+        self.memory_bank = torch.cat(self.memory_bank, 0) # VStack the patches
 
         # Coreset subsampling
         
@@ -79,4 +76,12 @@ class PatchCore(torch.nn.Module):
 
 
 
+        raise NotImplementedError
+
+
+    def evaluate(self, test_dataloader):
+        raise NotImplementedError
+
+
+    def predict(self):
         raise NotImplementedError
