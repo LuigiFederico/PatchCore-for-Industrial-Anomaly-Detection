@@ -1,7 +1,12 @@
+from tqdm import tqdm
+
 import torch
 from torch import tensor
-from tqdm import tqdm
+from torchvision import transforms
+
+from PIL import ImageFilter
 from sklearn import random_projection
+
 
 def get_coreset(
     memory_bank: tensor,
@@ -43,7 +48,7 @@ def get_coreset(
         min_distances = min_distances.to("cuda")
 
     for _ in tqdm(range(l-1)):
-        distances = torch.linalg.norm(memory_bank - last_item, dim=1, keepdims=True) # Norm l2 of distances (tensor)
+        distances = torch.linalg.norm(memory_bank - last_item, dim=1, keepdims=True) # L2 norm of distances (tensor)
         min_distances = torch.minimum(distances, min_distances)  # Verical tensor of minimum norms
         idx = torch.argmax(min_distances)                        # Index of maximum related to the minimum of norms
 
@@ -52,3 +57,20 @@ def get_coreset(
         coreset_idx.append(idx.to("cpu"))    # Save idx inside the coreset
 
     return torch.stack(coreset_idx)
+
+
+def gaussian_blur(img: tensor) -> tensor:
+    """
+        Apply a gaussian smoothing with sigma = 4 over the input image.
+    """
+    # Setup
+    blur_kernel = ImageFilter.GaussianBlur(radius=4)
+    tensor_to_pil = transforms.ToPILImage()
+    pil_to_tensor = transforms.ToTensor
+    
+    # Smoothing
+    max_value = img.max()  # Maximum value of all elements in the image tensor
+    blurred_pil = tensor_to_pil(img[0] / max_value).filter(blur_kernel)
+    blurred_map = pil_to_tensor(blurred_pil) * max_value
+
+    return blurred_map        

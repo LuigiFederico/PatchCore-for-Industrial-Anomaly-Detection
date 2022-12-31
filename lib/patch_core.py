@@ -1,12 +1,10 @@
 import torch
 from torch import tensor
+from torch.utils.data import DataLoader
 from torch.nn import functional as F
 import numpy as np
 
-from utils import get_coreset
-
-class KNNextractor():
-    pass
+from utils import gaussian_blur, get_coreset
 
 
 class PatchCore(torch.nn.Module):
@@ -14,7 +12,12 @@ class PatchCore(torch.nn.Module):
             self,
             f_coreset: float = 0.01,   # Fraction rate of training samples
             eps_coreset: float = 0.09, # SparseProjector parameter
+            k_nearest: int = 3,        # k parameter for K-NN search
     ):
+        assert f_coreset > 0
+        assert eps_coreset > 0
+        assert k_nearest > 0
+
         super(PatchCore, self).__init__()
         
         # Define hooks to extract feature maps
@@ -38,6 +41,9 @@ class PatchCore(torch.nn.Module):
         self.memory_bank = []
         self.f_coreset = f_coreset
         self.eps_coreset = eps_coreset
+        self.k_nearest = k_nearest
+        
+        self.image_size = 224
 
 
     def forward(self, sample: tensor) -> list(tensor):
@@ -54,7 +60,7 @@ class PatchCore(torch.nn.Module):
         return self.features
 
 
-    def fit(self, train_dataloader) -> None:
+    def fit(self, train_dataloader: DataLoader) -> None:
         """ 
             Training phase 
 
@@ -87,10 +93,64 @@ class PatchCore(torch.nn.Module):
             self.memory_bank = self.memory_bank[coreset_idx]
        
 
-
-    def evaluate(self, test_dataloader):
+    def evaluate(self, test_dataloader: DataLoader):
         raise NotImplementedError
 
 
-    def predict(self):
-        raise NotImplementedError
+    def predict(self, sample: tensor) -> tuple(tensor, tensor):
+        """
+            Anomaly detection over a test sample
+
+            1. Create a locally aware patch feature of the test sample.
+            2. Compute the image-level anomaly detection score by comparing
+            the test patch with the nearest neighbours patches inside the memory bank.
+            3. Compute a segmentation map realigning computed path anomaly scores based on
+            their respective spacial location. Then upscale the segmentation map by 
+            bi-linear interpolation and smooth the result with a gaussian blur.  
+
+
+            Args:
+            - sample:  test sample
+
+            Returns:
+            - Segmentation score
+            - Segmentation map
+        """
+        
+        # Patch extraction
+        feature_maps = self(sample)
+        resized_maps = [self.resize(self.avg(fmap)) for fmap in feature_maps]
+        patch = torch.cat(resized_maps, 1)
+        patch = patch.reshape(patch.shape[1], -1).T
+
+        # Compute maximum distance score s* (equation 6 from the paper)
+        distances = torch.cdist(patch, self.memory_bank, p=2.0)       # L2 norm dist btw test patch with each patch of memory bank
+        dist_score, dist_score_idxs = torch.min(distances, dim=1)     # Val and index of the distance scores (minimum values of each row in distances)
+        s_idx = torch.argmax(dist_score)                              # Index of the anomaly candidate patch
+        s_star = torch.max(dist_score)                                # Maximum distance score s*
+        m_test_star = torch.unsqueeze(patch[s_idx], dim=0)            # Anomaly candidate patch
+        m_star = self.patch_lib[dist_score_idxs[s_idx]].unsqueeze(0)  # Memory bank patch closest neighbour to m_test_star
+
+        # KNN
+        knn_dists = torch.cdist(m_star, self.memory_bank, p=2.0)      # L2 norm dist btw m_star with each patch of memory bank
+        _, nn_idxs = knn_dists.topk(k=self.k_nearest, largest=False)  # Values and indexes of the k smallest elements of knn_dists
+
+        # Compute image-level anomaly score s
+        m_star_neighbourhood = self.memory_bank[nn_idxs[0, 1:]]
+        w_denominator = torch.linalg.norm(m_test_star - m_star_neighbourhood, dim=1) # Sum over the exp of l2 norm distances btw m_test_star and the m* neighbourhood  
+        norm = torch.sqrt(torch.tensor(patch.shape[1]))                              # Softmax normalization trick to prevent exp(norm) from becoming infinite
+        w = 1 - (torch.exp(s_star/norm) / torch.sum(torch.exp(w_denominator/norm)))  # Equation 7 from the paper
+        s = w * s_star 
+
+        # Segmentation map
+        fmap_size = feature_maps[0].shape[-2:]       # Feature map sizes: h, w
+        segm_map = dist_score.view(1, 1, fmap_size)  # Reshape distance scores tensor
+        segm_map = torch.nn.functional.interpolate(  # Upscale by bi-linaer interpolation to match the original input resolution
+                        segm_map,
+                        size = (self.image_size, self.image_size),
+                        mode = 'bilinear'
+        )  
+        segm_map = gaussian_blur(segm_map)      # Gaussian blur of kernel width = 4
+
+
+        return s, segm_map
