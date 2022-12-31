@@ -1,8 +1,12 @@
+from tqdm import tqdm
+
 import torch
 from torch import tensor
 from torch.utils.data import DataLoader
 from torch.nn import functional as F
+
 import numpy as np
+from sklearn.metrics import roc_auc_score
 
 from utils import gaussian_blur, get_coreset
 
@@ -93,8 +97,38 @@ class PatchCore(torch.nn.Module):
             self.memory_bank = self.memory_bank[coreset_idx]
        
 
-    def evaluate(self, test_dataloader: DataLoader):
-        raise NotImplementedError
+    def evaluate(self, test_dataloader: DataLoader) -> tuple(float, float):
+        """
+            Compute anomaly detection score and relative segmentation map for 
+            each test sample. Returns the ROC AUC computed from predictions scores.
+            
+            Returns:
+            - image-level ROC-AUC score
+            - pixel-level ROC-AUC score
+        """
+
+        image_preds = []
+        image_labels = []
+        pixel_preds = []
+        pixel_labels = []
+
+        for sample, mask, label in tqdm(test_dataloader):
+            image_labels.append(label)
+            pixel_labels.extend(mask.flatten().numpy())
+
+            score, segm_map = self.predict(sample)  # Anomaly Detection
+
+            image_preds.append(score.numpy())
+            pixel_preds.extend(segm_map.flatten().numpy())
+        
+        image_labels = np.stack(image_labels)
+        image_preds = np.stack(image_preds)
+
+        # Compute ROC AUC for prediction scores
+        image_level_rocauc = roc_auc_score(image_labels, image_preds)
+        pixel_level_rocauc = roc_auc_score(pixel_labels, pixel_preds)
+
+        return image_level_rocauc, pixel_level_rocauc
 
 
     def predict(self, sample: tensor) -> tuple(tensor, tensor):
