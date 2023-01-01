@@ -73,4 +73,6 @@ def gaussian_blur(img: tensor) -> tensor:
     blurred_pil = tensor_to_pil(img[0] / max_value).filter(blur_kernel)
     blurred_map = pil_to_tensor(blurred_pil) * max_value
 
-    return blurred_map        
+    return blurred_map 
+    
+    

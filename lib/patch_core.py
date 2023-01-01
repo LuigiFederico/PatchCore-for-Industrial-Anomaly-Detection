@@ -8,7 +8,7 @@ from torch.nn import functional as F
 import numpy as np
 from sklearn.metrics import roc_auc_score
 
-from utils import gaussian_blur, get_coreset
+from .utils import gaussian_blur, get_coreset
 
 
 class PatchCore(torch.nn.Module):
@@ -30,7 +30,7 @@ class PatchCore(torch.nn.Module):
             self.features.append(output)
 
         # Setup backbone net
-        self.model = torch.hub.load('pytorch/vision:v0.9.0', 'wide_resnet50_2', pretrained=True)   
+        self.model = torch.hub.load('pytorch/vision', 'wide_resnet50_2', pretrained=True)   
         
         # Disable gradient computation
         for param in self.model.parameters(): 
@@ -50,7 +50,7 @@ class PatchCore(torch.nn.Module):
         self.image_size = 224
 
 
-    def forward(self, sample: tensor) -> list(tensor):
+    def forward(self, sample: tensor):
         """
             Initialize self.features and let the input sample passing
             throught the backbone net self.model. 
@@ -97,7 +97,7 @@ class PatchCore(torch.nn.Module):
             self.memory_bank = self.memory_bank[coreset_idx]
        
 
-    def evaluate(self, test_dataloader: DataLoader) -> tuple(float, float):
+    def evaluate(self, test_dataloader: DataLoader):
         """
             Compute anomaly detection score and relative segmentation map for 
             each test sample. Returns the ROC AUC computed from predictions scores.
@@ -131,7 +131,7 @@ class PatchCore(torch.nn.Module):
         return image_level_rocauc, pixel_level_rocauc
 
 
-    def predict(self, sample: tensor) -> tuple(tensor, tensor):
+    def predict(self, sample: tensor):
         """
             Anomaly detection over a test sample
 
@@ -188,3 +188,4 @@ class PatchCore(torch.nn.Module):
 
 
         return s, segm_map
+
