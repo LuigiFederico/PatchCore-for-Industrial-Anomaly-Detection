@@ -1,10 +1,12 @@
 import os
 from os.path import isdir
+
 import tarfile
 import wget
 import ssl
 from pathlib import Path
 from PIL import Image
+
 from torch import tensor
 from torchvision.datasets import ImageFolder
 from torchvision import transforms
@@ -89,13 +91,13 @@ class MVTecTestDataset(ImageFolder):
         super().__init__(
             root=DATASETS_PATH / cls / "test",
             transform=transforms.Compose([    # Transform img composing several actions
-                transforms.Resize(resize),    # Resize the image to the default value of 256 if not changed
+                transforms.Resize(resize, interpolation=transforms.InterpolationMode.BICUBIC), # Resize the image to the default value of 256 if not changed
                 transforms.CenterCrop(size),  # Center the image
                 transforms.ToTensor(),        # Transform the image into a tensor
                 transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),  # Normalize the image
             ]),
             target_transform=transforms.Compose([  # Transform mask composing several actions
-                transforms.Resize(resize),         # Resize the mask to the default value of 256 if not changed
+                transforms.Resize(resize, interpolation=transforms.InterpolationMode.NEAREST), # Resize the mask to the default value of 256 if not changed
                 transforms.CenterCrop(size),       # Center the mask
                 transforms.ToTensor(),             # Transform the mask into a tensor
             ]),
