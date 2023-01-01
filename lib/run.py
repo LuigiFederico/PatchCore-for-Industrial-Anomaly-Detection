@@ -15,7 +15,7 @@ def run_model(
         train_dl, test_dl = MVTecDataset(cls).get_dataloaders()
         patch_core = PatchCore(f_coreset)  # <--- UN PATCHCORE PER OGNI CLASSE???????????????????????????????
 
-        print(f'Class {cls}:')
+        print(f'\nClass {cls}:')
         print(f'Training...')
         patch_core.fit(train_dl)
 

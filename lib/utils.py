@@ -66,7 +66,7 @@ def gaussian_blur(img: tensor) -> tensor:
     # Setup
     blur_kernel = ImageFilter.GaussianBlur(radius=4)
     tensor_to_pil = transforms.ToPILImage()
-    pil_to_tensor = transforms.ToTensor
+    pil_to_tensor = transforms.ToTensor()
     
     # Smoothing
     max_value = img.max()  # Maximum value of all elements in the image tensor

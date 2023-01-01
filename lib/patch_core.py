@@ -15,7 +15,7 @@ class PatchCore(torch.nn.Module):
     def __init__(
             self,
             f_coreset: float = 0.01,   # Fraction rate of training samples
-            eps_coreset: float = 0.09, # SparseProjector parameter
+            eps_coreset: float = 0.90, # SparseProjector parameter
             k_nearest: int = 3,        # k parameter for K-NN search
     ):
         assert f_coreset > 0
@@ -70,7 +70,7 @@ class PatchCore(torch.nn.Module):
 
             Creates memory bank from train dataset and apply greedy coreset subsampling.
         """
-        for sample, _ in train_dataloader:
+        for sample, _ in tqdm(train_dataloader):
             feature_maps = self(sample)  # Extract feature maps
 
             # Create aggregation function of feature vectors in the neighbourhood
@@ -158,16 +158,16 @@ class PatchCore(torch.nn.Module):
         patch = patch.reshape(patch.shape[1], -1).T
 
         # Compute maximum distance score s* (equation 6 from the paper)
-        distances = torch.cdist(patch, self.memory_bank, p=2.0)       # L2 norm dist btw test patch with each patch of memory bank
-        dist_score, dist_score_idxs = torch.min(distances, dim=1)     # Val and index of the distance scores (minimum values of each row in distances)
-        s_idx = torch.argmax(dist_score)                              # Index of the anomaly candidate patch
-        s_star = torch.max(dist_score)                                # Maximum distance score s*
-        m_test_star = torch.unsqueeze(patch[s_idx], dim=0)            # Anomaly candidate patch
-        m_star = self.patch_lib[dist_score_idxs[s_idx]].unsqueeze(0)  # Memory bank patch closest neighbour to m_test_star
+        distances = torch.cdist(patch, self.memory_bank, p=2.0)        # L2 norm dist btw test patch with each patch of memory bank
+        dist_score, dist_score_idxs = torch.min(distances, dim=1)      # Val and index of the distance scores (minimum values of each row in distances)
+        s_idx = torch.argmax(dist_score)                               # Index of the anomaly candidate patch
+        s_star = torch.max(dist_score)                                 # Maximum distance score s*
+        m_test_star = torch.unsqueeze(patch[s_idx], dim=0)             # Anomaly candidate patch
+        m_star = self.memory_bank[dist_score_idxs[s_idx]].unsqueeze(0) # Memory bank patch closest neighbour to m_test_star
 
         # KNN
-        knn_dists = torch.cdist(m_star, self.memory_bank, p=2.0)      # L2 norm dist btw m_star with each patch of memory bank
-        _, nn_idxs = knn_dists.topk(k=self.k_nearest, largest=False)  # Values and indexes of the k smallest elements of knn_dists
+        knn_dists = torch.cdist(m_star, self.memory_bank, p=2.0)       # L2 norm dist btw m_star with each patch of memory bank
+        _, nn_idxs = knn_dists.topk(k=self.k_nearest, largest=False)   # Values and indexes of the k smallest elements of knn_dists
 
         # Compute image-level anomaly score s
         m_star_neighbourhood = self.memory_bank[nn_idxs[0, 1:]]
@@ -178,7 +178,7 @@ class PatchCore(torch.nn.Module):
 
         # Segmentation map
         fmap_size = feature_maps[0].shape[-2:]       # Feature map sizes: h, w
-        segm_map = dist_score.view(1, 1, fmap_size)  # Reshape distance scores tensor
+        segm_map = dist_score.view(1, 1, *fmap_size)  # Reshape distance scores tensor
         segm_map = torch.nn.functional.interpolate(  # Upscale by bi-linaer interpolation to match the original input resolution
                         segm_map,
                         size = (self.image_size, self.image_size),
