@@ -1,37 +1,39 @@
+from tqdm import tqdm
+
+import torch
+from torch import tensor
+from torch.utils.data import DataLoader
+from torch.nn import functional as F
+
+import numpy as np
+from sklearn.metrics import roc_auc_score
+
+from .utils import gaussian_blur, get_coreset
 
 
-
-class KNNextractor():
-    pass
-
-
-<<<<<<< Updated upstream
-class PatchCore():
-    pass
-=======
 class PatchCore(torch.nn.Module):
     def __init__(
             self,
-            f_coreset: float = 0.01,   # Fraction rate of training samples
-            eps_coreset: float = 0.90, # SparseProjector parameter
-            k_nearest: int = 3,        # k parameter for K-NN search
+            f_coreset: float = 0.01,  # Fraction rate of training samples
+            eps_coreset: float = 0.90,  # SparseProjector parameter
+            k_nearest: int = 3,  # k parameter for K-NN search
     ):
         assert f_coreset > 0
         assert eps_coreset > 0
         assert k_nearest > 0
 
         super(PatchCore, self).__init__()
-        
+
         # Define hooks to extract feature maps
         def hook(module, input, output) -> None:
             """This hook saves the extracted feature map on self.featured."""
             self.features.append(output)
 
         # Setup backbone net
-        self.model = torch.hub.load('pytorch/vision', 'wide_resnet50_2', pretrained=True)   
-        
+        self.model = torch.hub.load('pytorch/vision', 'wide_resnet50_2', pretrained=True)
+
         # Disable gradient computation
-        for param in self.model.parameters(): 
+        for param in self.model.parameters():
             param.requires_grad = False
         self.model.eval()
 
@@ -44,14 +46,13 @@ class PatchCore(torch.nn.Module):
         self.f_coreset = f_coreset
         self.eps_coreset = eps_coreset
         self.k_nearest = k_nearest
-        
-        self.image_size = 224
 
+        self.image_size = 224
 
     def forward(self, sample: tensor):
         """
             Initialize self.features and let the input sample passing
-            throught the backbone net self.model. 
+            throught the backbone net self.model.
             The registered hooks will extract the layer 2 and 3 feature maps.
 
             Return:
@@ -61,10 +62,9 @@ class PatchCore(torch.nn.Module):
         _ = self.model(sample)
         return self.features
 
-
     def fit(self, train_dataloader: DataLoader) -> None:
-        """ 
-            Training phase 
+        """
+            Training phase
 
             Creates memory bank from train dataset and apply greedy coreset subsampling.
         """
@@ -74,32 +74,31 @@ class PatchCore(torch.nn.Module):
             # Create aggregation function of feature vectors in the neighbourhood
             self.avg = torch.nn.AvgPool2d(3, stride=1)
             fmap_size = feature_maps[0].shape[-2:]  # Feature map sizes: h, w
-            self.resize = torch.nn.AdaptiveAvgPool2d(fmap_size) 
-            
+            self.resize = torch.nn.AdaptiveAvgPool2d(fmap_size)
+
             # Create patch
             resized_maps = [self.resize(self.avg(fmap)) for fmap in feature_maps]
-            patch = torch.cat(resized_maps, 1)          # Merge the resized feature maps
-            patch = patch.reshape(patch.shape[1], -1).T # Craete a column tensor
-            
-            self.memory_bank.append(patch) # Fill memory bank
-        
-        self.memory_bank = torch.cat(self.memory_bank, 0) # VStack the patches
+            patch = torch.cat(resized_maps, 1)  # Merge the resized feature maps
+            patch = patch.reshape(patch.shape[1], -1).T  # Craete a column tensor
+
+            self.memory_bank.append(patch)  # Fill memory bank
+
+        self.memory_bank = torch.cat(self.memory_bank, 0)  # VStack the patches
 
         # Coreset subsampling
         if self.f_coreset < 1:
             coreset_idx = get_coreset(
                 self.memory_bank,
-                l = int(self.f_coreset * self.memory_bank.shape[0]),
-                eps = self.eps_coreset
+                l=int(self.f_coreset * self.memory_bank.shape[0]),
+                eps=self.eps_coreset
             )
             self.memory_bank = self.memory_bank[coreset_idx]
-       
 
     def evaluate(self, test_dataloader: DataLoader):
         """
-            Compute anomaly detection score and relative segmentation map for 
+            Compute anomaly detection score and relative segmentation map for
             each test sample. Returns the ROC AUC computed from predictions scores.
-            
+
             Returns:
             - image-level ROC-AUC score
             - pixel-level ROC-AUC score
@@ -118,7 +117,7 @@ class PatchCore(torch.nn.Module):
 
             image_preds.append(score.numpy())
             pixel_preds.extend(segm_map.flatten().numpy())
-        
+
         image_labels = np.stack(image_labels)
         image_preds = np.stack(image_preds)
 
@@ -128,7 +127,6 @@ class PatchCore(torch.nn.Module):
 
         return image_level_rocauc, pixel_level_rocauc
 
-
     def predict(self, sample: tensor):
         """
             Anomaly detection over a test sample
@@ -137,8 +135,8 @@ class PatchCore(torch.nn.Module):
             2. Compute the image-level anomaly detection score by comparing
             the test patch with the nearest neighbours patches inside the memory bank.
             3. Compute a segmentation map realigning computed path anomaly scores based on
-            their respective spacial location. Then upscale the segmentation map by 
-            bi-linear interpolation and smooth the result with a gaussian blur.  
+            their respective spacial location. Then upscale the segmentation map by
+            bi-linear interpolation and smooth the result with a gaussian blur.
 
 
             Args:
@@ -148,44 +146,48 @@ class PatchCore(torch.nn.Module):
             - Segmentation score
             - Segmentation map
         """
-        
-        # Patch creation
-        feature_maps = self(sample)  # Using hooks i take features
+
+        # Patch extraction
+        feature_maps = self(sample)
         resized_maps = [self.resize(self.avg(fmap)) for fmap in feature_maps]
         patch = torch.cat(resized_maps, 1)
         patch = patch.reshape(patch.shape[1], -1).T
 
         # Compute maximum distance score s* (equation 6 from the paper)
-        distances = torch.cdist(patch, self.memory_bank, p=2.0)        # L2 norm dist btw test patch with each patch of memory bank
-        dist_score, dist_score_idxs = torch.min(distances, dim=1)      # Value and index of the distance scores (minimum values of each row in distances)
-        s_idx = torch.argmax(dist_score)                               # Index of the maximum value in dist_score (anomaly candidate patch)
-        s_star = torch.max(dist_score)                                 # Maximum value in dist_score (dist_score = distance score s*)
-        m_test_star = torch.unsqueeze(patch[s_idx], dim=0)             # Anomaly candidate patch
-        m_star = self.memory_bank[dist_score_idxs[s_idx]].unsqueeze(0) # Memory bank patch closest neighbour to m_test_star
+        distances = torch.cdist(patch, self.memory_bank,
+                                p=2.0)  # L2 norm dist btw test patch with each patch of memory bank
+        dist_score, dist_score_idxs = torch.min(distances,
+                                                dim=1)  # Val and index of the distance scores (minimum values of each row in distances)
+        s_idx = torch.argmax(dist_score)  # Index of the anomaly candidate patch
+        s_star = torch.max(dist_score)  # Maximum distance score s*
+        m_test_star = torch.unsqueeze(patch[s_idx], dim=0)  # Anomaly candidate patch
+        m_star = self.memory_bank[dist_score_idxs[s_idx]].unsqueeze(
+            0)  # Memory bank patch closest neighbour to m_test_star
 
         # KNN
-        knn_dists = torch.cdist(m_star, self.memory_bank, p=2.0)       # L2 norm dist btw m_star with each patch of memory bank
-        _, nn_idxs = knn_dists.topk(k=self.k_nearest, largest=False)   # Values and indexes of the k smallest elements of knn_dists
+        knn_dists = torch.cdist(m_star, self.memory_bank,
+                                p=2.0)  # L2 norm dist btw m_star with each patch of memory bank
+        _, nn_idxs = knn_dists.topk(k=self.k_nearest,
+                                    largest=False)  # Values and indexes of the k smallest elements of knn_dists
 
         # Compute image-level anomaly score s
         m_star_neighbourhood = self.memory_bank[nn_idxs[0, 1:]]
-        w_denominator = torch.linalg.norm(m_test_star - m_star_neighbourhood, dim=1) # Sum over the exp of l2 norm distances btw m_test_star and the m* neighbourhood  
-        norm = torch.sqrt(torch.tensor(patch.shape[1]))                              # Softmax normalization trick to prevent exp(norm) from becoming infinite
-        w = 1 - (torch.exp(s_star/norm) / torch.sum(torch.exp(w_denominator/norm)))  # Equation 7 from the paper
-        s = w * s_star 
+        w_denominator = torch.linalg.norm(m_test_star - m_star_neighbourhood,
+                                          dim=1)  # Sum over the exp of l2 norm distances btw m_test_star and the m* neighbourhood
+        norm = torch.sqrt(
+            torch.tensor(patch.shape[1]))  # Softmax normalization trick to prevent exp(norm) from becoming infinite
+        w = 1 - (torch.exp(s_star / norm) / torch.sum(torch.exp(w_denominator / norm)))  # Equation 7 from the paper
+        s = w * s_star
 
         # Segmentation map
-        fmap_size = feature_maps[0].shape[-2:]        # Feature map sizes: h, w
+        fmap_size = feature_maps[0].shape[-2:]  # Feature map sizes: h, w
         segm_map = dist_score.view(1, 1, *fmap_size)  # Reshape distance scores tensor
-        segm_map = torch.nn.functional.interpolate(   # Upscale by bi-linaer interpolation to match the original input resolution
-                        segm_map,
-                        size=(self.image_size, self.image_size),
-                        mode='bilinear'
+        segm_map = torch.nn.functional.interpolate(
+            # Upscale by bi-linaer interpolation to match the original input resolution
+            segm_map,
+            size=(self.image_size, self.image_size),
+            mode='bilinear'
         )
-        segm_map = gaussian_blur(segm_map)      # Gaussian blur of kernel width = 4
-
-        print(segm_map)
+        segm_map = gaussian_blur(segm_map)  # Gaussian blur of kernel width = 4
 
         return s, segm_map
-
->>>>>>> Stashed changes
