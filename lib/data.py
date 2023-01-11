@@ -1,10 +1,14 @@
 import os
 from os.path import isdir
+import clip
 import tarfile
 import wget
 import ssl
+import cv2
+import numpy as np
 from pathlib import Path
 from PIL import Image
+
 from torch import tensor
 from torchvision.datasets import ImageFolder
 from torchvision import transforms
@@ -36,19 +40,18 @@ class_links = {
 
 
 def mvtec_classes():
-    return [
-        "bottle", "cable", "capsule", "carpet", "grid", "hazelnut", "leather", "metal_nut", "pill", "screw", "tile",
-        "toothbrush", "transistor", "wood", "zipper"]
+    return [ "bottle"]#, "cable", "capsule", "carpet", "grid", "hazelnut", "leather", "metal_nut", "pill", "screw", "tile",
+        #"toothbrush", "transistor", "wood", "zipper"]
 
 
 class MVTecDataset:
-    def __init__(self, cls: str, size: int = DEFAULT_SIZE):
+    def __init__(self, cls: str, size: int = DEFAULT_SIZE, vanilla: bool = True, backbone: str = 'wide_resnet50_2'):
         self.cls = cls
         self.size = size
         if cls in mvtec_classes():
             self.check_and_download_cls()
-        self.train_ds = MVTecTrainDataset(cls, size)
-        self.test_ds = MVTecTestDataset(cls, size)
+        self.train_ds = MVTecTrainDataset(cls, size=size, vanilla=vanilla, backbone=backbone)
+        self.test_ds = MVTecTestDataset(cls, size=size,  vanilla=vanilla, backbone=backbone)
 
     def check_and_download_cls(self):
         if not isdir(DATASETS_PATH / self.cls):
@@ -69,41 +72,79 @@ class MVTecDataset:
         return DataLoader(self.train_ds), DataLoader(self.test_ds)
 
 
+def _convert_image_to_rgb(image):
+    return image.convert("RGB")
+
+
 class MVTecTrainDataset(ImageFolder):
-    def __init__(self, cls: str, size: int, resize: int = DEFAULT_RESIZE):
-        super().__init__(
-            root=DATASETS_PATH / cls / "train",
-            transform=transforms.Compose([    # Transform img composing several actions
-                transforms.Resize(resize),    # Resize the image to the default value of 256 if not changed
+    def __init__(self, cls: str, size: int, resize: int = DEFAULT_RESIZE, vanilla: bool = True,
+                 backbone: str = 'wide_resnet50_2'):
+        if vanilla:
+            transform = transforms.Compose([  # Transform img composing several actions
+                transforms.Resize(resize),  # Resize the image to the default value of 256 if not changed
                 transforms.CenterCrop(size),  # Center the image
-                transforms.ToTensor(),        # Transform the image into a tensor
+                transforms.ToTensor(),  # Transform the image into a tensor
                 transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),  # Normalize the image
             ])
+        else:
+            transform = transforms.Compose([
+                transforms.Resize(resize, interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.CenterCrop(resize),
+                _convert_image_to_rgb,
+                transforms.ToTensor(),
+                transforms.Normalize((0.481, 0.457, 0.408), (0.268, 0.261, 0.275))])
+
+        super().__init__(
+                root=DATASETS_PATH / cls / "train",
+                transform=transform
         )
+
         self.cls = cls
         self.size = size
 
 
 class MVTecTestDataset(ImageFolder):
-    def __init__(self, cls: str, size: int, resize: int = DEFAULT_RESIZE):
+    def __init__(self, cls: str, size: int, resize: int = DEFAULT_RESIZE, vanilla: bool = True,
+                 backbone: str = 'wide_resnet50_2'):
+        if vanilla:
+            transform = transforms.Compose([  # Transform img composing several actions
+                transforms.Resize(resize, interpolation=transforms.InterpolationMode.BICUBIC),
+                # Resize the image to the default value of 256 if not changed
+                transforms.CenterCrop(size),  # Center the image
+                transforms.ToTensor(),  # Transform the image into a tensor
+                transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),  # Normalize the image
+            ])
+            target_transform = transforms.Compose([  # Transform mask composing several actions
+                transforms.Resize(resize, interpolation=transforms.InterpolationMode.NEAREST),
+                # Resize the mask to the default value of 256 if not changed
+                transforms.CenterCrop(size),  # Center the mask
+                transforms.ToTensor(),  # Transform the mask into a tensor
+            ])
+        else:
+            transform  = transforms.Compose([
+                transforms.Resize(resize, interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.CenterCrop(resize),
+                _convert_image_to_rgb,
+                transforms.ToTensor(),
+                transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))])
+
+            target_transform = transforms.Compose([
+                transforms.Resize(resize, interpolation=transforms.InterpolationMode.NEAREST),
+                transforms.CenterCrop(resize),
+                _convert_image_to_rgb,  # MAGARI ESISTE UNA FUNZIONE COME QUESTA IN TRANSFORMS
+                transforms.ToTensor(),
+            ])
+
         super().__init__(
             root=DATASETS_PATH / cls / "test",
-            transform=transforms.Compose([    # Transform img composing several actions
-                transforms.Resize(resize),    # Resize the image to the default value of 256 if not changed
-                transforms.CenterCrop(size),  # Center the image
-                transforms.ToTensor(),        # Transform the image into a tensor
-                transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),  # Normalize the image
-            ]),
-            target_transform=transforms.Compose([  # Transform mask composing several actions
-                transforms.Resize(resize),         # Resize the mask to the default value of 256 if not changed
-                transforms.CenterCrop(size),       # Center the mask
-                transforms.ToTensor(),             # Transform the mask into a tensor
-            ]),
+            transform=transform,
+            target_transform = target_transform
         )
+
         self.cls = cls
         self.size = size
 
-    def getitem(self, index):
+    def __getitem__(self, index):
         path, _ = self.samples[index]
         sample = self.loader(path)
 
