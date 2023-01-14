@@ -13,7 +13,16 @@ backnones = {
     'ResNet50':'RN50',
     'ResNet50-4':'RN50x4',
     'ResNet50-16':'RN50x16',
-    'Vit32':'ViT-B/32'
+    'ResNet50-64':'RN50x64',
+}
+
+dataset_scale_factor = {
+    'WideResNet50':1,
+    'ResNet101':1,
+    'ResNet50':1,
+    'ResNet50-4':1,
+    'ResNet50-16':2,
+    'ResNet50-64':4,
 }
 
 def get_coreset(
@@ -28,7 +37,7 @@ def get_coreset(
         - memory_bank:     Patchcore memory bank tensor
         - l:               Number of patches to select
         - eps:             Sparse Random Projector parameter
-    
+
         Returns:
         - coreset indexes
     """
@@ -91,5 +100,3 @@ def tensor_to_image(tensor):
         assert tensor.shape[0] == 1
         tensor = tensor[0]
     return PIL.Image.fromarray(tensor)
-
-

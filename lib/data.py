@@ -40,8 +40,8 @@ class_links = {
 
 
 def mvtec_classes():
-    return [ "bottle"]#, "cable", "capsule", "carpet", "grid", "hazelnut", "leather", "metal_nut", "pill", "screw", "tile",
-        #"toothbrush", "transistor", "wood", "zipper"]
+    return [ "bottle", "cable", "capsule", "carpet", "grid", "hazelnut", "leather", "metal_nut", "pill", "screw", "tile",
+        "toothbrush", "transistor", "wood", "zipper"]
 
 
 class MVTecDataset:
@@ -54,8 +54,8 @@ class MVTecDataset:
             self.train_ds = MVTecTrainDataset(cls, size=size, vanilla=vanilla, backbone=backbone)
             self.test_ds = MVTecTestDataset(cls, size=size,  vanilla=vanilla, backbone=backbone)
         else:
-            self.train_ds = MVTecTrainDataset(cls, size=(size,size),resize=size, vanilla=vanilla, backbone=backbone)
-            self.test_ds = MVTecTestDataset(cls, size=(size,size),resize=size,  vanilla=vanilla, backbone=backbone)
+            self.train_ds = MVTecTrainDataset(cls, size=size ,resize=size, vanilla=vanilla, backbone=backbone)
+            self.test_ds = MVTecTestDataset(cls, size=size ,resize=size,  vanilla=vanilla, backbone=backbone)
 
     def check_and_download_cls(self):
         if not isdir(DATASETS_PATH / self.cls):
