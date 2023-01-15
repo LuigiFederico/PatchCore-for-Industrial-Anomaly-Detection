@@ -109,6 +109,6 @@ def tensor_to_image(tensor):
 
 def display_backbones():
     for k, v in backbones.items():
-        print(f"{k}: {v})")
+        print(f"{k}: {v}")
     print()
     
