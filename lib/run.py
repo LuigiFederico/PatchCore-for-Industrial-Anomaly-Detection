@@ -1,4 +1,4 @@
-from data import MVTecDataset, mvtec_classes, DEFAULT_SIZE
+from .data import MVTecDataset, mvtec_classes, DEFAULT_SIZE
 from patch_core import PatchCore
 from utils import backbones, dataset_scale_factor
 
