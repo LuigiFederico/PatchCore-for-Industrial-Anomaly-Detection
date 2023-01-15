@@ -62,4 +62,4 @@ def run_model(
 
 
 if __name__ == "__main__":
-    run_model(vanilla=True, backbone='WideResNet50')
+    run_model(backbone='WideResNet50')
