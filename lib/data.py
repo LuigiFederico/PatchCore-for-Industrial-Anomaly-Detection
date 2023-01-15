@@ -1,9 +1,10 @@
 import os
 from os.path import isdir
-
+import clip
 import tarfile
 import wget
 import ssl
+import cv2
 from pathlib import Path
 from PIL import Image
 
@@ -12,12 +13,17 @@ from torchvision.datasets import ImageFolder
 from torchvision import transforms
 from torch.utils.data import DataLoader
 
+
 # Parameters
 DATASETS_PATH = Path("./datasets")
-IMAGENET_MEAN = tensor([.485, .456, .406])  # Standard Parameter that can be found online
-IMAGENET_STD = tensor([.229, .224, .225])  # Standard Parameter that can be found online
 DEFAULT_SIZE = 224
 DEFAULT_RESIZE = 256
+
+IMAGENET_MEAN = tensor([.485, .456, .406])  
+IMAGENET_STD = tensor([.229, .224, .225]) 
+CLIP_MEAN = tensor([.481, .457, .408])
+CLIP_STD = tensor([.268, .261, .275])
+
 class_links = {
     "bottle": "https://www.mydrive.ch/shares/38536/3830184030e49fe74747669442f0f282/download/420937370-1629951468/bottle.tar.xz",
     "cable": "https://www.mydrive.ch/shares/38536/3830184030e49fe74747669442f0f282/download/420937413-1629951498/cable.tar.xz",
@@ -38,90 +44,195 @@ class_links = {
 
 
 def mvtec_classes():
-    return [
-        "bottle", "cable", "capsule", "carpet", "grid", "hazelnut", "leather", "metal_nut", "pill", "screw", "tile",
-        "toothbrush", "transistor", "wood", "zipper"]
+    return [ 
+        "bottle", 
+        "cable", 
+        "capsule", 
+        "carpet", 
+        "grid", 
+        "hazelnut", 
+        "leather", 
+        "metal_nut", 
+        "pill", 
+        "screw", 
+        "tile",
+        "toothbrush", 
+        "transistor", 
+        "wood", 
+        "zipper"
+    ]
 
 
 class MVTecDataset:
-    def __init__(self, cls: str, size: int = DEFAULT_SIZE):
+    def __init__(
+            self, 
+            cls: str, 
+            size: int = DEFAULT_SIZE, 
+            vanilla: bool = True,
+    ):
+        assert cls in mvtec_classes()
+
+        # Parameters
         self.cls = cls
-        self.size = size
-        if cls in mvtec_classes():
-            self.check_and_download_cls()
-        self.train_ds = MVTecTrainDataset(cls, size)
-        self.test_ds = MVTecTestDataset(cls, size)
+        self.size = size  
+        
+        # Download data
+        self.check_and_download_cls()
+
+        # Build datasets
+        if vanilla:
+            resize = DEFAULT_RESIZE
+        else:
+            resize = size
+
+        self.train_ds = MVTecTrainDataset(cls, size, resize, vanilla)
+        self.test_ds = MVTecTestDataset(cls, size, resize, vanilla)
+
 
     def check_and_download_cls(self):
+        """
+            If the expected dataset path is not found, 
+            download the dataset inside /dataset.
+        """
+
         if not isdir(DATASETS_PATH / self.cls):
             print(f"Class '{self.cls}' has not been found in '{DATASETS_PATH}/'. Downloading... \n")
+            
             ssl._create_default_https_context = ssl._create_unverified_context
-            wget.download(class_links[self.cls])
-            with tarfile.open(f"{self.cls}.tar.xz") as tar:
+            wget.download(class_links[self.cls]) # Downoad of the zipped dataset
+            with tarfile.open(f"{self.cls}.tar.xz") as tar: # Unzip
                 tar.extractall(DATASETS_PATH)
-            os.remove(f"{self.cls}.tar.xz")
+            os.remove(f"{self.cls}.tar.xz") # Clean up
+            
             print(f"Correctly Downloaded \n")
+
         else:
             print(f"Class '{self.cls}' has been found in '{DATASETS_PATH}/'\n")
 
+
     def get_datasets(self):
+        """
+            Returns as tuple:
+            - train dataset (MVTecTrainDataset class)
+            - test dataset (MVTecTestDataset class)
+        """
         return self.train_ds, self.test_ds
 
+
     def get_dataloaders(self):
+        """
+            Returns as tuple:
+            - train dataloader (torch.utils.data.DataLoader class)
+            - test dataloader (torch.utils.data.DataLoader class)
+        """
         return DataLoader(self.train_ds), DataLoader(self.test_ds)
 
 
+def _convert_image_to_rgb(image):
+    return image.convert("RGB")
+
+
 class MVTecTrainDataset(ImageFolder):
-    def __init__(self, cls: str, size: int, resize: int = DEFAULT_RESIZE):
-        super().__init__(
-            root=DATASETS_PATH / cls / "train",
-            transform=transforms.Compose([    # Transform img composing several actions
-                transforms.Resize(resize),    # Resize the image to the default value of 256 if not changed
-                transforms.CenterCrop(size),  # Center the image
-                transforms.ToTensor(),        # Transform the image into a tensor
-                transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),  # Normalize the image
+    def __init__(
+            self, 
+            cls: str, 
+            size: int, 
+            resize: int = DEFAULT_RESIZE, 
+            vanilla: bool = True,
+    ):
+        # Vanilla or CLIP
+        if vanilla:
+            transform = transforms.Compose([        # Image transform
+                transforms.Resize(resize),
+                transforms.CenterCrop(size),
+                transforms.ToTensor(),
+                transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD), 
+            ])     
+        else:
+            transform = transforms.Compose([
+                transforms.Resize(resize, interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.CenterCrop(size),
+                _convert_image_to_rgb,
+                transforms.ToTensor(),
+                transforms.Normalize(CLIP_MEAN, CLIP_STD),
             ])
+
+        # Parameters
+        super().__init__(
+                root = DATASETS_PATH / cls / "train",
+                transform = transform
         )
         self.cls = cls
         self.size = size
 
 
 class MVTecTestDataset(ImageFolder):
-    def __init__(self, cls: str, size: int, resize: int = DEFAULT_RESIZE):
+    def __init__(
+            self, 
+            cls: str, 
+            size: int, 
+            resize: int = DEFAULT_RESIZE, 
+            vanilla: bool = True,
+    ):
+
+        # Vanilla or CLIP
+        if vanilla:
+            transform = transforms.Compose([         # Image transform
+                transforms.Resize(resize, interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.CenterCrop(size),  
+                transforms.ToTensor(),  
+                transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD), 
+            ])
+            target_transform = transforms.Compose([  # Mask transform
+                transforms.Resize(resize, interpolation=transforms.InterpolationMode.NEAREST),
+                transforms.CenterCrop(size), 
+                transforms.ToTensor(),
+            ])
+        else:
+            transform  = transforms.Compose([        # Image transform
+                transforms.Resize(resize, interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.CenterCrop(size),
+                _convert_image_to_rgb,
+                transforms.ToTensor(),
+                transforms.Normalize(CLIP_MEAN, CLIP_STD),
+            ])
+
+            target_transform = transforms.Compose([  # Mask transform
+                transforms.Resize(resize, interpolation=transforms.InterpolationMode.NEAREST),
+                transforms.CenterCrop(size),
+                _convert_image_to_rgb, 
+                transforms.ToTensor(),
+            ])
+
+        # Parameters
         super().__init__(
             root=DATASETS_PATH / cls / "test",
-            transform=transforms.Compose([    # Transform img composing several actions
-                transforms.Resize(resize, interpolation=transforms.InterpolationMode.BICUBIC), # Resize the image to the default value of 256 if not changed
-                transforms.CenterCrop(size),  # Center the image
-                transforms.ToTensor(),        # Transform the image into a tensor
-                transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),  # Normalize the image
-            ]),
-            target_transform=transforms.Compose([  # Transform mask composing several actions
-                transforms.Resize(resize, interpolation=transforms.InterpolationMode.NEAREST), # Resize the mask to the default value of 256 if not changed
-                transforms.CenterCrop(size),       # Center the mask
-                transforms.ToTensor(),             # Transform the mask into a tensor
-            ]),
+            transform = transform,
+            target_transform = target_transform
         )
+
         self.cls = cls
         self.size = size
+
 
     def __getitem__(self, index):
         path, _ = self.samples[index]
         sample = self.loader(path)
 
-        if "good" in path:  # In this way is possible to understand the class label of the image
-            target = Image.new('L', (self.size, self.size))  # L is equal to 8-bit pixels black and white
+        if "good" in path:                                      # Nominal image
+            mask = Image.new('L', (self.size, self.size))       # L -> 8-bit pixels black and white
             sample_class = 0
-        else:
-            target_path = path.replace("test", "ground_truth")  # Change folder and goes into mask folder
-            target_path = target_path.replace(".png", "_mask.png")  # Change extension required
-            target = self.loader(target_path)
+        else:                                                   # Anomaly image
+            mask_path = path.replace("test", "ground_truth")    # Change folder and goes into mask folder
+            mask_path = mask_path.replace(".png", "_mask.png")  # Change extension required
+            mask = self.loader(mask_path)                       # Load the mask
             sample_class = 1
 
+        # Trasnformations 
         if self.transform is not None:
-            sample = self.transform(sample)  # Apply transformation to the image
+            sample = self.transform(sample)  
 
         if self.target_transform is not None:
-            target = self.target_transform(target)  # Apply transformation to the mask
+            mask = self.target_transform(mask)
 
-        return sample, target[:1], sample_class
+        return sample, mask[:1], sample_class
