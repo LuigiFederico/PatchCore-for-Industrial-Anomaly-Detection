@@ -11,7 +11,7 @@ from PIL import Image  # needed for CLIP
 import numpy as np
 from sklearn.metrics import roc_auc_score
 
-from .utils import gaussian_blur, get_coreset
+from utils import gaussian_blur, get_coreset
 
 
 class PatchCore(torch.nn.Module):
