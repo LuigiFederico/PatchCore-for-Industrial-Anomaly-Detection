@@ -23,12 +23,10 @@ def run_model(
         size = 288
     elif backbone == 'ResNet50-16':  # RN50x16
         size = 384
-    elif backbone == 'ResNet50-64':  # RN50x64
-        size = 448
     elif backbone == 'ResNet101':  # RN50x101
         size = 224
     else:
-        raise Exception('You can use the following nets: ResNet50, ResNet50-4, ResNet50-16, ResNet50-64, ResNet101')
+        raise Exception('You can use the following nets: ResNet50, ResNet50-4, ResNet50-16, ResNet101')
 
     print(f'Running PatchCore...')
     for cls in classes:
