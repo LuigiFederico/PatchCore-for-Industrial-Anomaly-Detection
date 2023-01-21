@@ -7,7 +7,7 @@ import torchvision.transforms as T
 
 from tqdm import tqdm
 import clip 
-from PIL import Image  # needed for CLIP
+from PIL import Image 
 import numpy as np
 from sklearn.metrics import roc_auc_score
 
@@ -49,13 +49,8 @@ class PatchCore(torch.nn.Module):
             self.model.layer3[-1].register_forward_hook(hook)            
         else:
             self.model, _ = clip.load(backbone, device="cpu")
-            if "ViT" in backbone:
-                self.model.visual.transformer[-1].register_forward_hook(hook)
-                self.model.visual.register_forward_hook(hook)
-                raise NotImplementedError
-            else:
-                self.model.visual.layer2[-1].register_forward_hook(hook)
-                self.model.visual.layer3[-1].register_forward_hook(hook)
+            self.model.visual.layer2[-1].register_forward_hook(hook)
+            self.model.visual.layer3[-1].register_forward_hook(hook)
 
         # Disable gradient computation
         self.model.eval()
@@ -90,7 +85,7 @@ class PatchCore(torch.nn.Module):
         return self.features
 
 
-    def fit(self, train_dataloader :DataLoader, scale :int=1) -> None:
+    def fit(self, train_dataloader: DataLoader, scale: int=1) -> None:
 
         """
             Training phase
@@ -113,7 +108,7 @@ class PatchCore(torch.nn.Module):
             patch = patch.reshape(patch.shape[1], -1).T   # Craete a column tensor
 
             self.memory_bank.append(patch)                # Fill memory bank
-            counter+=1
+            counter += 1
             if counter > tot:
                 break
 
@@ -139,13 +134,10 @@ class PatchCore(torch.nn.Module):
             - pixel-level ROC-AUC score
         """
 
-
         image_preds = []
         image_labels = []
         pixel_preds = []
         pixel_labels = []
-
-        transform = T.ToPILImage()
 
         for sample, mask, label in tqdm(test_dataloader):
 
@@ -176,8 +168,10 @@ class PatchCore(torch.nn.Module):
             3. Compute a segmentation map realigning computed path anomaly scores based on
             their respective spacial location. Then upscale the segmentation map by
             bi-linear interpolation and smooth the result with a gaussian blur.
+            
             Args:
             - sample:  test sample
+            
             Returns:
             - Segmentation score
             - Segmentation map
@@ -190,8 +184,7 @@ class PatchCore(torch.nn.Module):
         patch = patch.reshape(patch.shape[1], -1).T
 
         # Compute maximum distance score s* (equation 6 from the paper)
-        distances = torch.cdist(patch, self.memory_bank,
-                                p=2.0)                                  # L2 norm dist btw test patch with each patch of memory bank
+        distances = torch.cdist(patch, self.memory_bank, p=2.0)         # L2 norm dist btw test patch with each patch of memory bank
         dist_score, dist_score_idxs = torch.min(distances, dim=1)       # Val and index of the distance scores (minimum values of each row in distances)
         s_idx = torch.argmax(dist_score)                                # Index of the anomaly candidate patch
         s_star = torch.max(dist_score)                                  # Maximum distance score s*
@@ -213,10 +206,10 @@ class PatchCore(torch.nn.Module):
         fmap_size = feature_maps[0].shape[-2:]          # Feature map sizes: h, w
         segm_map = dist_score.view(1, 1, *fmap_size)    # Reshape distance scores tensor
         segm_map = torch.nn.functional.interpolate(     # Upscale by bi-linaer interpolation to match the original input resolution
-            segm_map,
-            size=(self.image_size, self.image_size),
-            mode='bilinear'
-        )
+                        segm_map,
+                        size=(self.image_size, self.image_size),
+                        mode='bilinear'
+                    )
         segm_map = gaussian_blur(segm_map)              # Gaussian blur of kernel width = 4
 
         return s, segm_map

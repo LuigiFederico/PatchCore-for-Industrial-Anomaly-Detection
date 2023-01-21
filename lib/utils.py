@@ -15,7 +15,6 @@ backbones = {
     'ResNet50':'RN50',
     'ResNet50-4':'RN50x4',
     'ResNet50-16':'RN50x16',
-    'ResNet50-64':'RN50x64',
 }
 
 dataset_scale_factor = {
@@ -23,8 +22,7 @@ dataset_scale_factor = {
     'ResNet101': 1,
     'ResNet50': 1,
     'ResNet50-4': 2,
-    'ResNet50-16': 3,
-    'ResNet50-64': 5,
+    'ResNet50-16': 4,
 }
 
 def get_coreset(
@@ -89,7 +87,7 @@ def gaussian_blur(img: tensor) -> tensor:
     pil_to_tensor = transforms.ToTensor()
 
     # Smoothing
-    max_value = img.max()  # Maximum value of all elements in the image tensor
+    max_value = img.max()   # Maximum value of all elements in the image tensor
     blurred_pil = tensor_to_pil(img[0] / max_value).filter(blur_kernel)
     blurred_map = pil_to_tensor(blurred_pil) * max_value
 
@@ -108,7 +106,8 @@ def tensor_to_image(tensor):
 
 
 def display_backbones():
-    for k, v in backbones.items():
-        print(f"{k}: {v}")
+    print("Possible backbones:")
+    for k, _ in backbones.items():
+        print(f"{k}")
     print()
     

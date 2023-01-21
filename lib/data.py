@@ -1,10 +1,8 @@
 import os
 from os.path import isdir
-import clip
 import tarfile
 import wget
 import ssl
-import cv2
 from pathlib import Path
 from PIL import Image
 
@@ -82,7 +80,7 @@ class MVTecDataset:
         # Build datasets
         if vanilla:
             resize = DEFAULT_RESIZE
-        else:
+        else:   # CLIP
             resize = size
 
         self.train_ds = MVTecTrainDataset(cls, size, resize, vanilla)
@@ -140,9 +138,9 @@ class MVTecTrainDataset(ImageFolder):
             resize: int = DEFAULT_RESIZE, 
             vanilla: bool = True,
     ):
-        # Vanilla or CLIP
+        # Vanilla/CLIP image pre-processing
         if vanilla:
-            transform = transforms.Compose([        # Image transform
+            transform = transforms.Compose([        
                 transforms.Resize(resize),
                 transforms.CenterCrop(size),
                 transforms.ToTensor(),
@@ -160,8 +158,7 @@ class MVTecTrainDataset(ImageFolder):
         # Parameters
         super().__init__(
                 root = DATASETS_PATH / cls / "train",
-                transform = transform
-        )
+                transform = transform )
         self.cls = cls
         self.size = size
 
@@ -175,7 +172,7 @@ class MVTecTestDataset(ImageFolder):
             vanilla: bool = True,
     ):
 
-        # Vanilla or CLIP
+        # Vanilla/CLIP image and mask pre-processing
         if vanilla:
             transform = transforms.Compose([         # Image transform
                 transforms.Resize(resize, interpolation=transforms.InterpolationMode.BICUBIC),
