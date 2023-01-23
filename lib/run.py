@@ -7,9 +7,10 @@ ALL_CLASSES = mvtec_classes()
 
 def run_model(
         classes: list = ALL_CLASSES,
-        f_coreset: float = 0.1,
         backbone: str = 'WideResNet50'
 ) -> None:
+
+    f_coreset = 0.1
 
     # Vanilla or Clip version
     vanilla = backbone == "WideResNet50"
