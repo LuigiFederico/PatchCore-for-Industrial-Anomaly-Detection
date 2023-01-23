@@ -18,7 +18,7 @@ The best approaches combine embeddings from ImageNet models with an outlier dete
 
 ![PatchCore approach](PatchCore_Architecture.png)
 
-[Source](https://arxiv.org/abs/2106.08265)
+[Source](https://github.com/amazon-science/patchcore-inspection/blob/main/images/architecture.png)
 
 ## Usage from Colab
 
