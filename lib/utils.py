@@ -8,6 +8,8 @@ from PIL import ImageFilter
 from sklearn import random_projection
 from tqdm import tqdm
 
+from .data import mvtec_classes
+
 
 backbones = {
     'WideResNet50':'wide_resnet50_2',
@@ -106,8 +108,17 @@ def tensor_to_image(tensor):
 
 
 def display_backbones():
-    print("Possible backbones:")
+    vanilla = True
+    print("Vanilla PatchCore backbone:")
+    print(f"- WideResNet50")
+    print("CLIP Image Encoder architectures for PatchCore backbone:")
     for k, _ in backbones.items():
-        print(f"{k}")
+        if vanilla:
+            vanilla = False
+            continue
+        print(f"- {k}")
     print()
     
+
+def display_MVTec_classes():
+    print(mvtec_classes())
