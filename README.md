@@ -2,7 +2,7 @@
 # PatchCore for Industrial Anomaly Detection
 
 
-[[Paper]]() [[Colab]](https://colab.research.google.com/drive/1mNQly_8bWsa208bxplfphZHMygwgt2Dh?usp=sharing)
+[[Paper]]() [[Colab]](https://colab.research.google.com/drive/1mNQly_8bWsa208bxplfphZHMygwgt2Dh?usp=sharing) [[Presentation]](https://docs.google.com/presentation/d/1o0RiK4-u8XyQ-H9zaHd7XMw7L6_cquO0iL2jupXvTBk/edit?usp=sharing)
 
 Nowadays the ability to recognize defective parts is very important in large-scale industrial manufacturing. The problem becomes more challenging when we try to fit a model using a nominal (non-defective) image only at training time. This problem is called "cold-start". 
 The best approaches combine embeddings from ImageNet models with an outlier detection model. In this repository, we reproduce the state-of-the-art approach called [__PatchCore__](https://arxiv.org/abs/2106.08265) which uses a representative memory bank of nominal patch features to achieve high performances both on detection and localization. We developed this approach using the MVTec Anomaly Detection dataset on which PatchCore achieves an image-level anomaly detection AUROC score of up to 98.4\%, almost doubling the performance compared to related works. Furthermore, we tested the patchcore by replacing the backbone with an alternative solution, trying to get better generalizable representations to leverage for the downstream task. This alternative solution is represented by [__CLIP__](https://arxiv.org/abs/2103.00020): we exploited the pretrained Image Encoder of CLIP instead of the ImageNet pretrained one. The experiment results suggest that using ResNet50x16 as the architecture of the image encoder we obtain better results on a smaller training set.
@@ -18,7 +18,7 @@ The best approaches combine embeddings from ImageNet models with an outlier dete
 
 ![PatchCore approach](PatchCore_Architecture.png)
 
-[Source](https://arxiv.org/abs/2106.08265)
+[Source](https://github.com/amazon-science/patchcore-inspection/blob/main/images/architecture.png)
 
 ## Usage from Colab
 
