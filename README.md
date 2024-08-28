@@ -21,9 +21,6 @@ The best approaches combine embeddings from ImageNet models with an outlier dete
 [Source](https://github.com/amazon-science/patchcore-inspection/blob/main/images/architecture.png)
 
 ## Usage from Colab
-
-You can easly run our code on the provided [Colab Jupyther Notebook](https://colab.research.google.com/drive/1mNQly_8bWsa208bxplfphZHMygwgt2Dh?usp=sharing). We suggest to use a GPU runtime.
-
 First of all, install all the required frameworks and import our repository. Then, you need to __choose which backbone you want to use__ as _Pretrained Encoder_ to run the PatchCore method.
 If you want to run the vanilla version of PatchCore, use `WideResNet50` as backbone. If you want to test the CLIP version, then you can choose between the following architectures:
 
